@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Review: {{.Title}}</title>
+    <style>
+      :root {
+        --bg: #fafaf8;
+        --card: #fff;
+        --ink: #1d1d1b;
+        --muted: #6b6b66;
+        --line: #e4e3de;
+        --flag: #fff4d6;
+        --flag-ink: #6b4e00;
+        --accent: #2f5d8a;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #161615;
+          --card: #1f1f1d;
+          --ink: #ecebe6;
+          --muted: #a3a29b;
+          --line: #33332f;
+          --flag: #3a3014;
+          --flag-ink: #f3d98b;
+          --accent: #8db8e3;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 16px 64px;
+      }
+      h1 {
+        font-size: 28px;
+        margin: 0 0 4px;
+      }
+      h2 {
+        font-size: 18px;
+        margin: 0 0 12px;
+      }
+      .sub {
+        color: var(--muted);
+        margin: 0 0 24px;
+      }
+      section {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 20px;
+        margin: 0 0 16px;
+      }
+      .flags {
+        background: var(--flag);
+        color: var(--flag-ink);
+        border-color: transparent;
+      }
+      .flags li {
+        margin: 4px 0;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 16px;
+      }
+      video,
+      audio,
+      img {
+        width: 100%;
+        border-radius: 8px;
+        display: block;
+      }
+      dl {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 6px 16px;
+        margin: 0;
+      }
+      dt {
+        color: var(--muted);
+      }
+      dd {
+        margin: 0;
+      }
+      blockquote {
+        margin: 0;
+        padding-left: 12px;
+        border-left: 3px solid var(--line);
+        color: var(--muted);
+      }
+      pre {
+        white-space: pre-wrap;
+        font: inherit;
+        margin: 0;
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+      }
+      .copy {
+        float: right;
+        font: inherit;
+        font-size: 13px;
+        color: var(--accent);
+        background: none;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 2px 10px;
+        cursor: pointer;
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 14px;
+      }
+      label.thumb {
+        display: block;
+        cursor: pointer;
+      }
+      label.thumb input {
+        margin: 8px 0 0;
+      }
+      ul {
+        padding-left: 20px;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>{{.Title}}</h1>
+      <p class="sub">{{.Church}} · {{.Date}} · sermon {{.Sermon.Length}}</p>
+
+      {{if .Flags}}
+      <section class="flags">
+        <h2>Check before publishing</h2>
+        <ul>
+          {{range .Flags}}
+          <li>{{.}}</li>
+          {{end}}
+        </ul>
+      </section>
+      {{end}}
+
+      <section>
+        <h2>Sermon cut points</h2>
+        <dl>
+          <dt>Starts</dt>
+          <dd>
+            {{.Sermon.Start}}{{if .Sermon.StartQuote}}
+            <blockquote>“{{.Sermon.StartQuote}}”</blockquote>
+            {{end}}
+          </dd>
+          <dt>Ends</dt>
+          <dd>
+            {{.Sermon.End}}{{if .Sermon.EndQuote}}
+            <blockquote>“{{.Sermon.EndQuote}}”</blockquote>
+            {{end}}
+          </dd>
+          <dt>Chosen by</dt>
+          <dd>
+            {{if eq .Sermon.Source "override"}}you
+            (--start/--end){{else}}Claude, confidence
+            {{.Sermon.Confidence}}{{end}}
+          </dd>
+          {{if .Sermon.Reasoning}}
+          <dt>Why</dt>
+          <dd>{{.Sermon.Reasoning}}</dd>
+          {{end}}
+        </dl>
+        <p class="muted">
+          Times are on the original recording. If a cut is wrong, rerun with
+          <code>--start</code> and <code>--end</code>.
+        </p>
+      </section>
+
+      <section>
+        <h2>Sermon video</h2>
+        <video controls preload="metadata" src="{{.Video.File}}"></video>
+        <p class="muted">
+          {{.Video.Loudness}} · captions:
+          <a href="{{.Captions}}">{{.Captions}}</a>
+        </p>
+      </section>
+
+      <section>
+        <h2>Podcast audio</h2>
+        <audio controls preload="metadata" src="{{.Podcast.File}}"></audio>
+        <p class="muted">{{.Podcast.Loudness}}</p>
+      </section>
+
+      <section>
+        <h2>YouTube title options</h2>
+        <ul>
+          {{range .Text.Titles}}
+          <li>{{.}}</li>
+          {{end}}
+        </ul>
+      </section>
+
+      <section>
+        <button class="copy" data-copy="youtube">Copy</button>
+        <h2>YouTube description</h2>
+        <pre id="youtube">{{.Text.YouTube}}</pre>
+      </section>
+
+      <section>
+        <button class="copy" data-copy="podcast-text">Copy</button>
+        <h2>Podcast description</h2>
+        <pre id="podcast-text">{{.Text.Podcast}}</pre>
+      </section>
+
+      {{if .Thumbs}}
+      <section>
+        <h2>Thumbnails</h2>
+        <div class="grid">
+          {{range $i, $t := .Thumbs}}
+          <label class="thumb"
+            ><img src="{{$t}}" alt="Thumbnail {{$t}}" /><input
+              type="radio"
+              name="thumb"
+            />
+            {{$t}}</label
+          >
+          {{end}}
+        </div>
+      </section>
+      {{end}} {{if .Clips}}
+      <section>
+        <h2>Clips</h2>
+        <div class="grid">
+          {{range .Clips}}
+          <div>
+            <video controls preload="metadata" src="{{.File}}"></video>
+            <p>
+              <strong>{{.Title}}</strong> · {{.Length}} · score
+              {{.Score}}/10{{if .Uncropped}} ·
+              <em>uncropped: tracking was unreliable</em>{{end}}
+            </p>
+            <p class="muted">{{.Caption}}</p>
+            <p class="muted">Reviewer: {{.Review}}</p>
+          </div>
+          {{end}}
+        </div>
+        {{if .Rejected}}
+        <p class="muted">
+          Not used: {{range $i, $r := .Rejected}}{{if $i}} ·
+          {{end}}{{$r}}{{end}}
+        </p>
+        {{end}}
+      </section>
+      {{end}} {{if or .Fixes .Refused}}
+      <section>
+        <h2>Transcript corrections</h2>
+        {{if .Fixes}}
+        <ul>
+          {{range .Fixes}}
+          <li>{{.}}</li>
+          {{end}}
+        </ul>
+        {{end}} {{if .Refused}}
+        <p class="muted">Proposed but refused by the safety rule:</p>
+        <ul class="muted">
+          {{range .Refused}}
+          <li>{{.}}</li>
+          {{end}}
+        </ul>
+        {{end}}
+      </section>
+      {{end}}
+    </main>
+    <script>
+      for (const button of document.querySelectorAll("button.copy")) {
+        button.addEventListener("click", async () => {
+          await navigator.clipboard.writeText(
+            document.getElementById(button.dataset.copy).textContent
+          );
+          button.textContent = "Copied";
+          setTimeout(() => (button.textContent = "Copy"), 1500);
+        });
+      }
+    </script>
+  </body>
+</html>

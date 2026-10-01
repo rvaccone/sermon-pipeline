@@ -1,0 +1,7 @@
+# Copy to labels.toml and list past services with the sermon cut points a person chose.
+# `sermon eval eval/labels.toml` reports how far the automatic cut points are from these.
+
+[[service]]
+recording = "~/Downloads/sermon-probe/The Character of Kingdom Living _ Matthew 7_ 1-6.mp4"
+start = "24:41.25"
+end = "1:22:24"

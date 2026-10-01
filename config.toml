@@ -1,0 +1,34 @@
+# Settings for Feather Sound Church. Anything not listed here uses the defaults in
+# internal/config/config.go, which are the values the probe validated.
+
+[church]
+name = "Feather Sound Church"
+website = "feathersoundchurch.com"
+location = "Clearwater, FL"
+mission = "Gather in worship, grow in faith and community, and go into the world to make a meaningful difference through the love of Jesus."
+podcast = "Feather Sound Church"
+
+[transcription]
+# Names and terms the corrections stage may restore when the transcript mis-hears them. Claude
+# proposes the fixes; only replacements that sound like the transcribed words are applied.
+glossary = [
+  "Feather Sound Church",
+  "Calvary Chapel",
+  "Pastor Art Dykstra",
+  "Healing Hearts",
+  "Launch Global",
+  "Grow Groups",
+  "The Sound",
+  "Clearwater",
+  "St. Petersburg",
+  "Sermon on the Mount",
+]
+
+[sermon]
+# "after-closing-prayer" includes the closing prayer and response; "after-teaching" stops
+# when the teaching ends.
+ends = "after-closing-prayer"
+
+[claude]
+model = "claude-opus-5-5"
+effort = "high"
