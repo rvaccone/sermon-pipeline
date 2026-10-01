@@ -1,4 +1,5 @@
-# Settings for Feather Sound Church. Anything not listed here uses the defaults in
+# Example settings: the ones Feather Sound Church uses. Copy this file to config.toml and replace
+# the church's details with yours. Anything not listed uses the defaults in
 # internal/config/config.go, which are the values the probe validated.
 
 [church]

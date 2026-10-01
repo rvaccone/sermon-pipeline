@@ -1,3 +1,4 @@
 /bin/
 /vision/.build/
 /result
+/config.toml

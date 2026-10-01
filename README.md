@@ -1,6 +1,11 @@
 # sermon-pipeline
 
-Turns a recorded church service into publish-ready sermon outputs, all on this Mac:
+> **Status: prototype.** I'm building this for Feather Sound Church in Clearwater, FL, to show a
+> better way to produce each week's sermon video, podcast and clips. It has been tested on one
+> service so far, runs only on Apple Silicon Macs, and comes without support. Other churches are
+> welcome to try it.
+
+Turns a recorded church service into publish-ready sermon outputs, all on a Mac:
 
 - the sermon cut from the service, encoded for YouTube, with loudness-normalized audio
 - YouTube captions (`.srt`) and a readable transcript
@@ -10,15 +15,17 @@ Turns a recorded church service into publish-ready sermon outputs, all on this M
 - four thumbnail options
 - `Review.html`, one page showing all of it, with anything doubtful flagged at the top
 
-It never uploads anything and never touches YouTube or SermonShots. Publishing stays a person's
-job, and if this tool isn't used one week, the church's usual process still works (see
-[docs/fallback.md](docs/fallback.md)).
+These are the files the church would actually publish. For now the pipeline stops at a folder of
+them, and a person reviews and uploads them; the goal is for it to publish on its own once its
+outputs have proven reliable. If it isn't used one week, the church's usual process still works
+(see [docs/fallback.md](docs/fallback.md)).
 
 ## Setup
 
 ```sh
 nix develop            # pinned toolchain: Go, ffmpeg-full, whisper.cpp, sherpa-onnx, ImageMagick
 make build             # bin/sermon and bin/sermon-vision (the Swift helper uses Xcode's toolchain)
+cp config.example.toml config.toml   # then replace the church's details with yours
 bin/sermon setup       # downloads the AI models (~3.3 GB) to ~/.cache/sermon-pipeline/models
 ```
 
@@ -112,7 +119,8 @@ video encode.
 
 ## Settings
 
-`config.toml` holds the church's details and anything that differs from the defaults in
+`config.toml` (start from [config.example.toml](config.example.toml), which is Feather Sound's)
+holds the church's details and anything that differs from the defaults in
 [internal/config/config.go](internal/config/config.go): the glossary, where the sermon ends
 (`after-closing-prayer` or `after-teaching`), Claude model and effort, loudness targets, encoder
 quality, clip count and length, caption font.

@@ -98,6 +98,9 @@ func Default() Config {
 func Load(path string) (Config, error) {
 	cfg := Default()
 	meta, err := toml.DecodeFile(path, &cfg)
+	if errors.Is(err, os.ErrNotExist) {
+		return cfg, fmt.Errorf("%s not found: copy config.example.toml to %s and fill in your church's details", path, path)
+	}
 	if err != nil {
 		return cfg, fmt.Errorf("reading %s: %w", path, err)
 	}

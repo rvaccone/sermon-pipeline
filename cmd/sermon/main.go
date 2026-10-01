@@ -1,6 +1,6 @@
 // Command sermon turns a recorded church service into publish-ready sermon outputs: the trimmed
 // sermon video, podcast audio, captions, descriptions, clips, thumbnails and a review page.
-// It never uploads anything.
+// It writes them to a folder; publishing them is done by hand for now.
 package main
 
 import (
