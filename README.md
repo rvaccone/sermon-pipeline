@@ -86,7 +86,7 @@ probe → analysis audio ─┬─ transcribe ─┐
 
 | Stage        | What it does                                                                                                                                                                             | Tool                      |
 | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| transcribe | Silero VAD finds the speech; each stretch is transcribed by Whisper large-v3 with word timing (DTW) and a punctuated glossary prompt carried through every window, then shifted back onto the recording's timeline | whisper.cpp |
+| transcribe | Silero VAD finds the speech; each stretch is transcribed by Whisper large-v3-turbo with word timing (DTW) and a short punctuated prompt carried through every window, then shifted back onto the recording's timeline; a stretch that loops is transcribed again without its own context, and any loop that remains is flagged | whisper.cpp |
 | diarize      | Who speaks when                                                                                                                                                                          | sherpa-onnx               |
 | sermon       | Claude proposes start/end **with quotes**; the quotes must exist in the transcript; cuts snap into pauses; speaker detection and length are cross-checked, and disagreements are flagged | Claude, ffmpeg            |
 | corrections | Claude proposes fixes for mis-heard glossary terms and Bible references; one is applied only if it sounds like the transcribed words, changes nothing else, and (for a reference) names a real book and numbers that were said | Claude |
@@ -99,9 +99,16 @@ probe → analysis audio ─┬─ transcribe ─┐
 The settings come from probing a real service: x264 beat Apple's hardware encoder on VMAF (worst-1%
 frames 96.9 vs 95.4 at half the bitrate); whisper.cpp drops punctuation on long recordings unless the
 prompt is carried, and its built-in VAD mode reports word times on a compressed timeline, so speech
-regions are found separately; noise reduction made no audible difference on this church's gated microphone;
+regions are found separately; large-v3 fell into repetition loops (one sentence repeated for 18
+minutes) where large-v3-turbo transcribed the same audio cleanly with the same punctuation, so turbo is
+the default; noise reduction made no audible difference on this church's gated microphone;
 a full-height 9:16 crop of 720p video kept the preacher's whole body in frame only 35–65% of the time, while the
 4:5 window keeps him whole 89–99% of the time.
+
+On that service the pipeline placed the sermon's start 3.7 s after a hand-picked cut (it starts at the
+preacher's first sentence at the lectern rather than the "Amen" he says while walking up) and its end
+within 1 s; the full run took 31 minutes on an M-series Mac, most of it speaker detection and the
+video encode.
 
 ## Settings
 

@@ -6,12 +6,16 @@ import (
 	"strings"
 )
 
-var nonSlug = regexp.MustCompile(`[^a-z0-9]+`)
+var (
+	apostrophe = regexp.MustCompile(`['’]`)
+	nonSlug    = regexp.MustCompile(`[^a-z0-9]+`)
+)
 
-// Make lowercases s, joins words with hyphens, and shortens the result to at most limit bytes,
+// Make lowercases s, drops apostrophes ("don't" becomes "dont"), joins words with hyphens, and shortens the result to at most limit bytes,
 // ending at a whole word when it has to cut.
 func Make(s string, limit int) string {
-	out := strings.Trim(nonSlug.ReplaceAllString(strings.ToLower(s), "-"), "-")
+	out := apostrophe.ReplaceAllString(strings.ToLower(s), "")
+	out = strings.Trim(nonSlug.ReplaceAllString(out, "-"), "-")
 	if len(out) <= limit {
 		return out
 	}

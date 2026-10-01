@@ -96,7 +96,7 @@ func (j *Job) Stages() []pipeline.Stage {
 			Run: j.describe,
 		},
 		{
-			Name: "clip-picks", Version: 3, Needs: []string{"corrections", "diarize", "sermon"},
+			Name: "clip-picks", Version: 4, Needs: []string{"corrections", "diarize", "sermon"},
 			Inputs: func() any {
 				return []any{c.Clips.Count, c.Clips.MinScore, c.Clips.MinSeconds, c.Clips.MaxSeconds,
 					claude("clip-candidates"), claude("clip-review"), j.uses(ffmpeg)}
