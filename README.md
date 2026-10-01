@@ -147,3 +147,8 @@ Code layout: `cmd/sermon` is the CLI; `internal/stages` wires the pipeline toget
 package under `internal/` does one job (`transcript`, `diarize`, `sermon`, `clips`, `media`, …) and
 is tested on its own. Claude prompts live in `internal/llm/prompts/` and are versioned by content
 hash in `run.json`.
+
+## License
+
+[FSL 1.1 with an MIT future grant](LICENSE.md). Fair Source: use it, read it, modify it for your
+church. Do not ship a competing substitute. Each release becomes MIT two years after it ships.
