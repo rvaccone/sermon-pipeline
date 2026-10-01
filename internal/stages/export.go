@@ -20,8 +20,8 @@ type exportRecord struct {
 // person puts in the folder is left alone.
 var managed = []string{reviewPage, transcriptText, "YouTube", "Podcast", clipsDir}
 
-// exportName is the output folder's name, e.g. "2026-07-26 · Judging Without Hypocrisy
-// (Matthew 7.1-6)", so each sermon is easy to find. Characters Finder can't show are replaced.
+// exportName is the output folder's name, e.g. "2026-07-26 · Don't Judge - The Splinter and the
+// Beam (Matthew 7.1-6)", so each sermon is easy to find. Characters Finder can't show are replaced.
 func exportName(date string, text describe.Text) string {
 	name := date
 	if len(text.Titles) > 0 {
@@ -31,7 +31,7 @@ func exportName(date string, text describe.Text) string {
 	if text.Passage != "" {
 		name += " (" + text.Passage + ")"
 	}
-	name = strings.NewReplacer(":", ".", "/", "-", "\\", "-").Replace(name)
+	name = strings.NewReplacer(": ", " - ", ":", ".", "/", "-", "\\", "-").Replace(name)
 	if r := []rune(name); len(r) > 120 {
 		name = strings.TrimSpace(string(r[:120]))
 	}

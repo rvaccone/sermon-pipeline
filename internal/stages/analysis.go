@@ -2,6 +2,7 @@ package stages
 
 import (
 	"context"
+	"slices"
 
 	"github.com/rvaccone/sermon-pipeline/internal/cut"
 	"github.com/rvaccone/sermon-pipeline/internal/diarize"
@@ -72,7 +73,7 @@ func (j *Job) findSermon(ctx context.Context) error {
 			return err
 		}
 		if b, err = sermon.Detect(ctx, claude, sermon.Input{
-			Transcript: t, Turns: turns, Ends: j.Config.Sermon.Ends,
+			Transcript: t, Turns: turns, Ends: j.Config.Sermon.Ends, Preachers: j.Config.Church.Preachers,
 			Duration: info.Duration, Pauses: j.pauses(),
 		}); err != nil {
 			return err
@@ -93,7 +94,13 @@ func (j *Job) correct(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	fixed, outcomes, err := terms.Correct(ctx, claude, t, b.Span, j.Config.Transcription.Glossary)
+	glossary := slices.Clone(j.Config.Church.Preachers)
+	for _, term := range j.Config.Transcription.Glossary {
+		if !slices.Contains(glossary, term) {
+			glossary = append(glossary, term)
+		}
+	}
+	fixed, outcomes, err := terms.Correct(ctx, claude, t, b.Span, glossary)
 	if err != nil {
 		return err
 	}

@@ -9,7 +9,7 @@ Turns a recorded church service into publish-ready sermon outputs, all on a Mac:
 
 - the sermon cut from the service, encoded for YouTube, with loudness-normalized audio
 - YouTube captions (`.srt`) and a readable transcript
-- podcast audio (MP3) at podcast loudness
+- podcast audio (MP3) at podcast loudness, titled and with chapters
 - YouTube title options, a description with chapters, tags and hashtags, and a podcast description
 - three vertical clips that keep the preacher centered, with word-by-word captions
 - four thumbnail options
@@ -25,9 +25,15 @@ outputs have proven reliable. If it isn't used one week, the church's usual proc
 ```sh
 nix develop            # pinned toolchain: Go, ffmpeg-full, whisper.cpp, sherpa-onnx, ImageMagick
 make build             # bin/sermon and bin/sermon-vision (the Swift helper uses Xcode's toolchain)
-cp config.example.toml config.toml   # then replace the church's details with yours
+bin/sermon init feathersoundchurch.com   # writes config.toml from the church's website
 bin/sermon setup       # downloads the AI models (~3.3 GB) to ~/.cache/sermon-pipeline/models
 ```
+
+`init` reads the homepage and the pages it links to that look like About, Staff or Contact pages,
+and Claude fills in the church's name, location, mission, preachers and a glossary of names to
+listen for. It lists the pages it read and anything it was unsure of; check the values before the
+first run. It never overwrites an existing `config.toml`. To fill one in by hand instead, copy
+[config.example.toml](config.example.toml), which is Feather Sound's.
 
 The steps that read the transcript use Claude through the Claude Code CLI in headless mode
 (`claude -p`), on your Claude subscription; no API key is needed. Sign in to `claude` once. Each
@@ -55,8 +61,8 @@ Each sermon gets its own folder in `~/Sermons`, named by date, title and passage
       Tags.txt               paste into the Tags field
       Thumbnails/1.jpg … 4.jpg
     Podcast/
-      Episode.mp3
-      Description.txt
+      Episode.mp3            titled like the video, with chapters
+      Description.txt        includes chapters
     Clips/
       01-….mp4 …
       Post captions.txt
@@ -86,7 +92,7 @@ probe → analysis audio ─┬─ transcribe ─┐
                                                   │               ├─ describe ── thumbnails
                                                   │               └─ clip picks ─ clips
                                                   ├─ master audio ─┬─ video
-                                                  │                └─ podcast
+                                                  │                └─ podcast (after describe)
                                                   └─ thumbnail frames
                                                                      … → review
 ```
@@ -119,9 +125,10 @@ video encode.
 
 ## Settings
 
-`config.toml` (start from [config.example.toml](config.example.toml), which is Feather Sound's)
+`config.toml` (from `sermon init`, or start from [config.example.toml](config.example.toml))
 holds the church's details and anything that differs from the defaults in
-[internal/config/config.go](internal/config/config.go): the glossary, where the sermon ends
+[internal/config/config.go](internal/config/config.go): the preachers (the description names
+the preacher from this list when the transcript identifies them), the glossary, where the sermon ends
 (`after-closing-prayer` or `after-teaching`), Claude model and effort, loudness targets, encoder
 quality, clip count and length, caption font.
 

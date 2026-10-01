@@ -29,6 +29,10 @@ type Church struct {
 	Website  string `toml:"website"`
 	Mission  string `toml:"mission"`
 	Podcast  string `toml:"podcast"` // podcast/show name used in audio tags
+	// Preachers are the people who preach here, as the church writes their names ("Pastor Art
+	// Dykstra"). Sermon detection names the preacher from this list when the transcript
+	// identifies them, and corrections may restore these names like glossary terms.
+	Preachers []string `toml:"preachers"`
 }
 
 type Transcription struct {

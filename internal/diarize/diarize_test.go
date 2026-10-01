@@ -59,3 +59,25 @@ func TestMainAndOthers(t *testing.T) {
 		t.Error("an unknown preacher must not label silence as Preacher")
 	}
 }
+
+func TestSpeakingFillsGapsWithinOneSpeakersTalk(t *testing.T) {
+	turns := []Turn{
+		{timeline.Span{Start: 0, End: 10}, "a"},
+		{timeline.Span{Start: 50, End: 60}, "a"}, // 40 s gap: a slow, quiet stretch of the same talk
+		{timeline.Span{Start: 65, End: 70}, "b"},
+		{timeline.Span{Start: 200, End: 210}, "b"}, // 130 s gap: too long to presume
+	}
+	for _, tc := range []struct {
+		at   float64
+		want string
+	}{
+		{5, "a"}, {30, "a"}, {62, ""}, {100, ""}, {300, ""}, {-1, ""},
+	} {
+		if got := Speaking(turns, tc.at); got != tc.want {
+			t.Errorf("Speaking(%v) = %q, want %q", tc.at, got, tc.want)
+		}
+	}
+	if got := At(turns, 30); got != "" {
+		t.Errorf("At(30) = %q; At must still report silence", got)
+	}
+}

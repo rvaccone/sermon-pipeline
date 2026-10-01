@@ -8,6 +8,9 @@ website = "feathersoundchurch.com"
 location = "Clearwater, FL"
 mission = "Gather in worship, grow in faith and community, and go into the world to make a meaningful difference through the love of Jesus."
 podcast = "Feather Sound Church"
+# Who preaches here, as the church writes their names. The pipeline names the preacher from this
+# list when the transcript identifies them, and restores these names when they're mis-heard.
+preachers = ["Pastor Art Dykstra", "Pastor Doug Allen"]
 
 [transcription]
 # Names and terms the corrections stage may restore when the transcript mis-hears them. Claude
@@ -15,7 +18,6 @@ podcast = "Feather Sound Church"
 glossary = [
   "Feather Sound Church",
   "Calvary Chapel",
-  "Pastor Art Dykstra",
   "Healing Hearts",
   "Launch Global",
   "Grow Groups",

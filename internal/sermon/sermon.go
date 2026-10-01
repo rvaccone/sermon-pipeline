@@ -6,6 +6,7 @@ package sermon
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/rvaccone/sermon-pipeline/internal/cut"
@@ -32,7 +33,8 @@ type Boundary struct {
 type Input struct {
 	Transcript transcript.Transcript
 	Turns      []diarize.Turn
-	Ends       string // config: "after-closing-prayer" or "after-teaching"
+	Ends       string   // config: "after-closing-prayer" or "after-teaching"
+	Preachers  []string // config: who preaches at this church, as the church writes their names
 	Duration   float64
 	Pauses     cut.Pauses
 }
@@ -51,8 +53,12 @@ type answer struct {
 
 // Detect asks Claude for the boundaries, then verifies and refines them.
 func Detect(ctx context.Context, ask llm.Asker, in Input) (Boundary, error) {
-	prompt := fmt.Sprintf("Rule for the end of the sermon: %s\n\nTranscript:\n%s",
-		in.Ends, transcript.Lines(in.Transcript.Words, diarize.Neutral(in.Turns), diarize.Unclear))
+	var known string
+	if len(in.Preachers) > 0 {
+		known = "People who preach at this church: " + strings.Join(in.Preachers, "; ") + "\n\n"
+	}
+	prompt := fmt.Sprintf("%sRule for the end of the sermon: %s\n\nTranscript:\n%s",
+		known, in.Ends, transcript.Lines(in.Transcript.Words, diarize.Neutral(in.Turns), diarize.Unclear))
 	var a answer
 	if err := ask.Ask(ctx, llm.Load("sermon-boundaries"), prompt, &a); err != nil {
 		return Boundary{}, err
@@ -88,7 +94,7 @@ func Detect(ctx context.Context, ask llm.Asker, in Input) (Boundary, error) {
 		b.flag("A sermon cut point has no pause nearby; it was placed by word timing. Listen to the first and last seconds.")
 	}
 	b.Span = span
-	b.PreacherName = b.verifiedName(a.PreacherName, in.Transcript)
+	b.PreacherName = b.verifiedName(a.PreacherName, in.Transcript, in.Preachers)
 	b.crossCheck(in.Turns)
 	return b, nil
 }
@@ -113,22 +119,55 @@ func locate(t transcript.Transcript, quote, at string) (transcript.Match, error)
 	return m, nil
 }
 
-// verifiedName keeps Claude's preacher name only if the name itself (without a title like
-// "Pastor") appears in the sermon's transcript, so an invented name can't reach a description.
-func (b *Boundary) verifiedName(name string, t transcript.Transcript) string {
-	words := strings.Fields(name)
-	for len(words) > 1 && titles[strings.ToLower(strings.TrimSuffix(words[0], "."))] {
-		words = words[1:]
-	}
+// verifiedName keeps Claude's preacher name only if the transcript bears it out, so an invented
+// name can't reach a description. A name that matches one of the church's preachers ("Pastor Art"
+// for "Pastor Art Dykstra") is given as the church writes it, and one of that person's names must
+// have been said; any other name must have been said in full (a title like "Pastor" aside).
+func (b *Boundary) verifiedName(name string, t transcript.Transcript, preachers []string) string {
+	words := withoutTitle(name)
 	if len(words) == 0 {
 		return ""
 	}
 	middle := (b.Span.Start + b.Span.End) / 2
-	if _, ok := t.Find(strings.Join(words, " "), middle, b.Span.Duration()); ok {
+	said := func(phrase string) bool {
+		_, ok := t.Find(phrase, middle, b.Span.Duration())
+		return ok
+	}
+	for _, p := range preachers {
+		listed := withoutTitle(p)
+		if !within(words, listed) {
+			continue
+		}
+		for _, w := range listed {
+			if said(w) {
+				return p
+			}
+		}
+	}
+	if said(strings.Join(words, " ")) {
 		return name
 	}
 	b.flag(fmt.Sprintf("Claude named the preacher %q, but the name isn't in the transcript, so it was not used.", name))
 	return ""
+}
+
+// withoutTitle splits a name into words, dropping a leading title like "Pastor".
+func withoutTitle(name string) []string {
+	words := strings.Fields(name)
+	for len(words) > 1 && titles[strings.ToLower(strings.TrimSuffix(words[0], "."))] {
+		words = words[1:]
+	}
+	return words
+}
+
+// within reports whether every word of name is one of full's words, ignoring case.
+func within(name, full []string) bool {
+	for _, w := range name {
+		if !slices.ContainsFunc(full, func(f string) bool { return strings.EqualFold(f, w) }) {
+			return false
+		}
+	}
+	return true
 }
 
 var titles = map[string]bool{"pastor": true, "brother": true, "sister": true, "rev": true, "reverend": true, "dr": true, "elder": true}

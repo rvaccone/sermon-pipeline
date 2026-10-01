@@ -23,6 +23,7 @@ import (
 )
 
 const usage = `usage:
+  sermon init <website> [--config FILE]     write a starting config.toml from the church's website
   sermon setup [--config config.toml]       download the AI models
   sermon run <recording> [options]          process one service
   sermon eval <labels.toml> [options]       score sermon detection against hand-picked times
@@ -49,6 +50,8 @@ func main() {
 
 	var err error
 	switch os.Args[1] {
+	case "init":
+		err = initConfig(ctx, os.Args[2:])
 	case "setup":
 		err = setup(ctx, os.Args[2:])
 	case "run":

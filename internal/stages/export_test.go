@@ -13,6 +13,10 @@ func TestExportName(t *testing.T) {
 	if got := exportName("2026-07-26", text); got != "2026-07-26 · Judging Without Hypocrisy (Matthew 7.1-6)" {
 		t.Errorf("exportName = %q", got)
 	}
+	colon := describe.Text{Titles: []string{"Don't Judge: The Splinter and the Beam | Matthew 7:1-6"}, Passage: "Matthew 7:1-6"}
+	if got := exportName("2026-07-26", colon); got != "2026-07-26 · Don't Judge - The Splinter and the Beam (Matthew 7.1-6)" {
+		t.Errorf("exportName = %q", got)
+	}
 	if got := exportName("2026-07-26", describe.Text{}); got != "2026-07-26" {
 		t.Errorf("exportName without a title = %q", got)
 	}

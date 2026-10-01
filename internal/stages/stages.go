@@ -46,14 +46,18 @@ func (j *Job) Stages() []pipeline.Stage {
 			Run:     j.diarize,
 		},
 		{
-			Name: SermonStage, Version: 3, Needs: []string{"probe", "transcribe", "diarize"},
-			Inputs:  func() any { return []any{c.Sermon, j.Override, claude("sermon-boundaries"), j.uses(ffmpeg)} },
+			Name: SermonStage, Version: 4, Needs: []string{"probe", "transcribe", "diarize"},
+			Inputs: func() any {
+				return []any{c.Sermon, c.Church.Preachers, j.Override, claude("sermon-boundaries"), j.uses(ffmpeg)}
+			},
 			Outputs: files(j.work("sermon.json")),
 			Run:     j.findSermon,
 		},
 		{
 			Name: "corrections", Version: 2, Needs: []string{"transcribe", "sermon"},
-			Inputs:  func() any { return []any{c.Transcription.Glossary, claude("transcript-corrections")} },
+			Inputs: func() any {
+				return []any{c.Church.Preachers, c.Transcription.Glossary, claude("transcript-corrections")}
+			},
 			Outputs: files(j.work("transcript-corrected.json"), j.work("corrections.json")),
 			Run:     j.correct,
 		},
@@ -83,20 +87,20 @@ func (j *Job) Stages() []pipeline.Stage {
 			Run:     j.video,
 		},
 		{
-			Name: "podcast", Version: 1, Needs: []string{"podcast-audio"},
+			Name: "podcast", Version: 2, Needs: []string{"podcast-audio", "describe", SermonStage},
 			Inputs:  func() any { return []any{c.Church, c.Audio.PodcastBitrate, j.Date, j.uses(ffmpeg)} },
-			Outputs: files(j.out(podcastAudio)),
+			Outputs: files(j.out(podcastAudio), j.out(podcastDesc)),
 			Run:     j.podcast,
 		},
 		{
-			Name: "describe", Version: 2, Needs: []string{"corrections", "sermon"},
+			Name: "describe", Version: 3, Needs: []string{"corrections", "sermon"},
 			Inputs: func() any { return []any{c.Church, j.Preacher, j.Date, claude("descriptions")} },
 			Outputs: files(j.work("descriptions.json"), j.out(youtubeDesc), j.out(youtubeTitles),
-				j.out(youtubeTags), j.out(podcastDesc)),
+				j.out(youtubeTags)),
 			Run: j.describe,
 		},
 		{
-			Name: "clip-picks", Version: 4, Needs: []string{"corrections", "diarize", "sermon"},
+			Name: "clip-picks", Version: 5, Needs: []string{"corrections", "diarize", "sermon"},
 			Inputs: func() any {
 				return []any{c.Clips.Count, c.Clips.MinScore, c.Clips.MinSeconds, c.Clips.MaxSeconds,
 					claude("clip-candidates"), claude("clip-review"), j.uses(ffmpeg)}

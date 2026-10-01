@@ -2,10 +2,12 @@ package media
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/rvaccone/sermon-pipeline/internal/timeline"
 )
@@ -47,19 +49,37 @@ func RenderSermon(ctx context.Context, s VideoSpec) error {
 
 // PodcastSpec describes the podcast episode file.
 type PodcastSpec struct {
-	Audio   string // mastered mono WAV
-	Bitrate string
-	Title   string
-	Artist  string
-	Album   string
-	Date    string // YYYY-MM-DD
-	Comment string
-	Dest    string
+	Audio    string // mastered mono WAV
+	Bitrate  string
+	Title    string
+	Artist   string
+	Album    string
+	Date     string // YYYY-MM-DD
+	Comment  string
+	Chapters []Chapter
+	Dest     string
 }
 
-// EncodePodcast writes the MP3 with ID3 tags.
+// Chapter is a titled stretch of the episode, in seconds from its start.
+type Chapter struct {
+	Span  timeline.Span
+	Title string
+}
+
+// EncodePodcast writes the MP3 with ID3 tags and, if there are any, ID3 chapters, which podcast
+// apps show as a chapter list.
 func EncodePodcast(ctx context.Context, p PodcastSpec) error {
-	return FFmpeg(ctx, "-i", p.Audio,
+	meta, err := os.CreateTemp("", "sermon-chapters-*.txt")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(meta.Name())
+	_, err = meta.WriteString(ffmetadata(p.Chapters))
+	if err := errors.Join(err, meta.Close()); err != nil {
+		return err
+	}
+	return FFmpeg(ctx, "-i", p.Audio, "-f", "ffmetadata", "-i", meta.Name(),
+		"-map", "0:a", "-map_chapters", "1",
 		"-c:a", "libmp3lame", "-b:a", p.Bitrate, "-id3v2_version", "3",
 		"-metadata", "title="+p.Title,
 		"-metadata", "artist="+p.Artist,
@@ -67,6 +87,18 @@ func EncodePodcast(ctx context.Context, p PodcastSpec) error {
 		"-metadata", "date="+p.Date,
 		"-metadata", "comment="+p.Comment,
 		p.Dest)
+}
+
+// ffmetadata writes chapters in ffmpeg's metadata file format.
+func ffmetadata(chapters []Chapter) string {
+	escape := strings.NewReplacer(`\`, `\\`, "=", `\=`, ";", `\;`, "#", `\#`, "\n", `\`+"\n")
+	var b strings.Builder
+	b.WriteString(";FFMETADATA1\n")
+	for _, c := range chapters {
+		fmt.Fprintf(&b, "[CHAPTER]\nTIMEBASE=1/1000\nSTART=%d\nEND=%d\ntitle=%s\n",
+			int64(math.Round(c.Span.Start*1000)), int64(math.Round(c.Span.End*1000)), escape.Replace(c.Title))
+	}
+	return b.String()
 }
 
 // CheckMP3 encodes a WAV the way the podcast is delivered and measures it.

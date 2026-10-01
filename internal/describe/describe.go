@@ -169,10 +169,7 @@ func assemble(body string, t Text, in Input) string {
 		b.WriteString("\n\nScripture: " + strings.Join(t.Scripture, " · "))
 	}
 	if len(t.Chapters) > 0 {
-		b.WriteString("\n\nChapters\n")
-		for _, c := range t.Chapters {
-			fmt.Fprintf(&b, "%s %s\n", timeline.Clock(c.At), c.Title)
-		}
+		b.WriteString("\n\n" + ChapterList(t.Chapters))
 	}
 	footer := in.Church
 	if in.Location != "" {
@@ -181,6 +178,17 @@ func assemble(body string, t Text, in Input) string {
 	fmt.Fprintf(&b, "\n%s\n%s\n", footer, in.Website)
 	if len(t.Hashtags) > 0 {
 		b.WriteString("\n" + strings.Join(t.Hashtags, " ") + "\n")
+	}
+	return b.String()
+}
+
+// ChapterList writes chapters the way YouTube and Spotify read them from a description:
+// "Chapters", then one "12:34 Title" line each.
+func ChapterList(chapters []Chapter) string {
+	var b strings.Builder
+	b.WriteString("Chapters\n")
+	for _, c := range chapters {
+		fmt.Fprintf(&b, "%s %s\n", timeline.Clock(c.At), c.Title)
 	}
 	return b.String()
 }

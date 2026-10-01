@@ -94,3 +94,27 @@ func TestDetectDropsAnInventedPreacherName(t *testing.T) {
 		t.Errorf("PreacherName = %q; a name not in the transcript must be dropped even though \"Brother\" was said", b.PreacherName)
 	}
 }
+
+func TestDetectNamesAListedPreacher(t *testing.T) {
+	tr := service() // the preacher says "Brother Doug here."
+	last := tr.Words[len(tr.Words)-1]
+	for _, tc := range []struct{ claude, want string }{
+		{"Doug", "Brother Doug Example"},                 // short form → the name as the church writes it
+		{"Brother Doug Example", "Brother Doug Example"}, // surname not said, but "Doug" was
+		{"Pastor Art Dykstra", ""},                       // listed, but nothing of the name was said
+	} {
+		reply := `{"start_quote":"Amen it's good to be in the house","start_time":"0:16",
+			"end_quote":"said amen. Have a great day.","end_time":"` + timeline.Clock(last.Start-8) + `",
+			"preacher_name":"` + tc.claude + `","confidence":"high","reasoning":"r","notes":[]}`
+		b, err := Detect(context.Background(), fakeAsker{reply}, Input{
+			Transcript: tr, Duration: last.End + 5, Pauses: noPauses,
+			Preachers: []string{"Pastor Art Dykstra", "Brother Doug Example"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if b.PreacherName != tc.want {
+			t.Errorf("Claude said %q: PreacherName = %q, want %q", tc.claude, b.PreacherName, tc.want)
+		}
+	}
+}

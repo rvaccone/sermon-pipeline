@@ -8,6 +8,7 @@ import (
 	"github.com/rvaccone/sermon-pipeline/internal/describe"
 	"github.com/rvaccone/sermon-pipeline/internal/media"
 	"github.com/rvaccone/sermon-pipeline/internal/sermon"
+	"github.com/rvaccone/sermon-pipeline/internal/timeline"
 	"github.com/rvaccone/sermon-pipeline/internal/transcript"
 )
 
@@ -69,13 +70,41 @@ func (j *Job) video(ctx context.Context) error {
 	})
 }
 
+// podcast writes the episode, titled like the video and with its chapters, and its description,
+// which lists the chapters too so Spotify can show them.
 func (j *Job) podcast(ctx context.Context) error {
+	var (
+		text describe.Text
+		b    sermon.Boundary
+	)
+	if err := readAll(load{j.work("descriptions.json"), &text}, load{j.work("sermon.json"), &b}); err != nil {
+		return err
+	}
+	title := "Sermon · " + j.Date
+	if len(text.Titles) > 0 {
+		title = text.Titles[0]
+	}
+	var chapters []media.Chapter
+	for i, c := range text.Chapters {
+		end := b.Span.Duration()
+		if i+1 < len(text.Chapters) {
+			end = text.Chapters[i+1].At
+		}
+		chapters = append(chapters, media.Chapter{Span: timeline.Span{Start: c.At, End: end}, Title: c.Title})
+	}
 	church := j.Config.Church
-	return media.EncodePodcast(ctx, media.PodcastSpec{
+	if err := media.EncodePodcast(ctx, media.PodcastSpec{
 		Audio: j.work("master-podcast.wav"), Bitrate: j.Config.Audio.PodcastBitrate,
-		Title: "Sermon · " + j.Date, Artist: church.Name, Album: church.Podcast,
-		Date: j.Date, Comment: church.Website, Dest: j.out(podcastAudio),
-	})
+		Title: title, Artist: church.Name, Album: church.Podcast,
+		Date: j.Date, Comment: church.Website, Chapters: chapters, Dest: j.out(podcastAudio),
+	}); err != nil {
+		return err
+	}
+	description := text.Podcast + "\n"
+	if len(text.Chapters) > 0 {
+		description += "\n" + describe.ChapterList(text.Chapters)
+	}
+	return os.WriteFile(j.out(podcastDesc), []byte(description), 0o644)
 }
 
 func (j *Job) describe(ctx context.Context) error {
@@ -102,7 +131,6 @@ func (j *Job) describe(ctx context.Context) error {
 		j.out(youtubeDesc):   text.YouTube,
 		j.out(youtubeTitles): strings.Join(text.Titles, "\n") + "\n",
 		j.out(youtubeTags):   strings.Join(text.Tags, ", ") + "\n",
-		j.out(podcastDesc):   text.Podcast + "\n",
 	}
 	for path, content := range writes {
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {

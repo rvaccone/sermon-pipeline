@@ -43,3 +43,15 @@ func TestParseLoudness(t *testing.T) {
 		t.Error("silent audio must be an error, not a gain of +inf dB")
 	}
 }
+func TestFFMetadata(t *testing.T) {
+	got := ffmetadata([]Chapter{
+		{timeline.Span{Start: 0, End: 96.5}, "Welcome; and = Prayer"},
+		{timeline.Span{Start: 96.5, End: 300}, "Pearls #2"},
+	})
+	want := ";FFMETADATA1\n" +
+		"[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=96500\ntitle=Welcome\\; and \\= Prayer\n" +
+		"[CHAPTER]\nTIMEBASE=1/1000\nSTART=96500\nEND=300000\ntitle=Pearls \\#2\n"
+	if got != want {
+		t.Errorf("ffmetadata =\n%s\nwant\n%s", got, want)
+	}
+}

@@ -33,6 +33,10 @@ type Options struct {
 const (
 	minTurn  = 2.0 // speaker blips shorter than this are noise (found in the probe)
 	mergeGap = 1.5 // a speaker's turns closer than this are one turn
+	// maxFill is the longest gap between two turns by the same speaker that is credited to them
+	// when labeling words. Detection drops a phrase here and there in a long talk; in the probe's
+	// sermon 48 of 50 such gaps lay between two of the preacher's turns, the longest 40 s.
+	maxFill = 60.0
 )
 
 // Run diarizes the audio and returns cleaned, merged turns in time order.
@@ -97,6 +101,25 @@ func At(turns []Turn, t float64) string {
 		if turn.Contains(t) {
 			return turn.Speaker
 		}
+	}
+	return ""
+}
+
+// Speaking returns who is talking at t: the speaker of the turn containing t or, in a gap of at
+// most maxFill seconds between two turns by the same speaker, that speaker. turns must be in time
+// order. It is for labeling words, which are known to be speech; At is for asking whether anyone
+// is speaking at all.
+func Speaking(turns []Turn, t float64) string {
+	if who := At(turns, t); who != "" {
+		return who
+	}
+	i := sort.Search(len(turns), func(i int) bool { return turns[i].Start > t })
+	if i == 0 || i == len(turns) {
+		return ""
+	}
+	before, after := turns[i-1], turns[i]
+	if before.Speaker == after.Speaker && after.Start-before.End <= maxFill {
+		return before.Speaker
 	}
 	return ""
 }
@@ -170,7 +193,7 @@ func WithPreacher(turns []Turn, preacher string) func(t float64) string {
 
 func labeler(turns []Turn, names map[string]string) func(t float64) string {
 	return func(t float64) string {
-		if who := At(turns, t); who != "" {
+		if who := Speaking(turns, t); who != "" {
 			return names[who]
 		}
 		return Unclear

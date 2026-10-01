@@ -24,6 +24,9 @@ End of the sermon depends on the church's rule, given in the input:
 For each boundary, copy 6–15 consecutive words exactly as they appear in the transcript, and give
 the time printed on the line where the quote begins. Report anything unusual in `notes`: a guest
 speaker or testimony during the sermon, a split sermon, a missing beginning or end, or a service
-with no sermon. Set `confidence` to low whenever you are unsure, rather than guessing. Give
-`preacher_name` only if the transcript states it (for example an introduction or a self-reference);
-otherwise leave it empty.
+with no sermon. Set `confidence` to low whenever you are unsure, rather than guessing.
+
+`preacher_name`: the input may list the people who preach at this church. If the transcript shows
+the preacher is one of them (an introduction, a self-reference, or a transcription of their name
+that is slightly off), give the name exactly as listed. Otherwise give a name only if the
+transcript states it, and leave it empty if it doesn't. Never guess from the list alone.
