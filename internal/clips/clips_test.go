@@ -14,28 +14,92 @@ import (
 	"github.com/rvaccone/sermon-pipeline/internal/vision"
 )
 
-func TestCameraKeepsHimCentered(t *testing.T) {
-	// He walks steadily from 30% to 70% of the frame over 10 seconds.
+var testCamera = Camera{FrameW: 1280, WindowW: 576, Tolerance: 0.08, Smoothing: 1}
+
+// track builds pose frames at 30 fps from a neck position (share of frame width) over time.
+func track(seconds float64, neck func(t float64) float64) []vision.PoseFrame {
 	var frames []vision.PoseFrame
-	for i := 0; i <= 300; i++ {
+	for i := 0; i <= int(seconds*30); i++ {
 		tm := float64(i) / 30
-		frames = append(frames, vision.PoseFrame{T: 100 + tm, Necks: []vision.Point{{0.3 + 0.04*tm, 0.3}}})
+		frames = append(frames, vision.PoseFrame{T: 100 + tm, Necks: []vision.Point{{neck(tm), 0.3}}})
 	}
-	cam := Camera{FrameW: 1280, WindowW: 576, Smoothing: 0.3}
-	left, ok := cam.Path(frames, 100, 300)
+	return frames
+}
+
+// motion reports how far the camera travels in total and how often it changes direction.
+func motion(left []float64) (travel float64, reversals int) {
+	dir := 0.0
+	for i := 1; i < len(left); i++ {
+		d := left[i] - left[i-1]
+		travel += math.Abs(d)
+		if math.Abs(d) > 0.05 {
+			if dir != 0 && math.Signbit(d) != math.Signbit(dir) {
+				reversals++
+			}
+			dir = d
+		}
+	}
+	return travel, reversals
+}
+
+func TestCameraFollowsAWalk(t *testing.T) {
+	// He walks steadily from 30% to 70% of the frame over 10 seconds.
+	frames := track(10, func(t float64) float64 { return 0.3 + 0.04*t })
+	left, ok := testCamera.Path(frames, 100, 300)
 	if !ok {
 		t.Fatal("tracking should be trusted with full coverage")
 	}
 	for i := 30; i < 270; i += 30 {
 		neck := (0.3 + 0.04*float64(i)/30) * 1280
-		if off := math.Abs(neck - (left[i] + 288)); off > 3 {
-			t.Errorf("frame %d: %.1f px off-center", i, off)
+		if off := math.Abs(neck - (left[i] + 288)); off > 0.08*576+3 {
+			t.Errorf("frame %d: %.1f px off-center, more than the tolerance", i, off)
 		}
 	}
 }
 
+func TestCameraHoldsStillWhileHeSways(t *testing.T) {
+	// He stands at 50% and sways ±30 px every two seconds for 30 seconds.
+	frames := track(30, func(t float64) float64 { return 0.5 + 30.0/1280*math.Sin(math.Pi*t) })
+	left, _ := testCamera.Path(frames, 100, 900)
+	if travel, reversals := motion(left); travel > 5 || reversals > 0 {
+		t.Errorf("the camera moved %.1f px and changed direction %d times; it should hold still", travel, reversals)
+	}
+}
+
+func TestCameraEasesIntoAndOutOfAMove(t *testing.T) {
+	// He stands at 35%, takes two quick steps to 60% in one second, and stands again.
+	frames := track(16, func(t float64) float64 {
+		f := math.Max(0, math.Min(1, t-8))
+		return 0.35 + 0.25*f
+	})
+	left, _ := testCamera.Path(frames, 100, 480)
+	if _, reversals := motion(left); reversals > 0 {
+		t.Errorf("the camera changed direction %d times during one move; it should not overshoot", reversals)
+	}
+	var fastest, sharpest float64
+	for i := 2; i < len(left); i++ {
+		fastest = math.Max(fastest, math.Abs(left[i]-left[i-1]))
+		sharpest = math.Max(sharpest, math.Abs(left[i]-2*left[i-1]+left[i-2]))
+	}
+	// He moves 320 px in 30 frames (10.7 px a frame, all at once); the camera spreads that out.
+	if fastest > 8 || sharpest > 0.6 {
+		t.Errorf("fastest %.1f px/frame, sharpest change %.2f px/frame²; the move should be eased", fastest, sharpest)
+	}
+	if end := 0.6*1280 - (left[len(left)-1] + 288); math.Abs(end) > 0.08*576+3 {
+		t.Errorf("he ends %.0f px off-center, outside the tolerance", end)
+	}
+}
+
+func TestCameraCommandsUseOutputPixels(t *testing.T) {
+	got := cameraCommands([]float64{100, 100.2, 100.6, 101}, 1.875)
+	want := "0.0000 crop@cam x 188;\n0.0667 crop@cam x 189;\n" // 100.6 and 101 both land on 189
+	if got != want {
+		t.Errorf("commands =\n%s\nwant\n%s", got, want)
+	}
+}
+
 func TestCameraClampsToFrameAndFallsBack(t *testing.T) {
-	cam := Camera{FrameW: 1280, WindowW: 576, Smoothing: 0.3}
+	cam := testCamera
 	edge := []vision.PoseFrame{{T: 0, Necks: []vision.Point{{0.99, 0.3}}}, {T: 1, Necks: []vision.Point{{0.99, 0.3}}}}
 	left, _ := cam.Path(edge, 0, 30)
 	if left[10] != 1280-576 {

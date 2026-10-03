@@ -69,7 +69,8 @@ type Clips struct {
 	MinSeconds       float64 `toml:"min_seconds"`
 	MaxSeconds       float64 `toml:"max_seconds"`
 	CRF              int     `toml:"crf"`
-	SmoothingSeconds float64 `toml:"smoothing_seconds"` // camera smoothing; larger is calmer
+	SmoothingSeconds float64 `toml:"smoothing_seconds"` // how gradually the camera eases into and out of a pan
+	CameraTolerance  float64 `toml:"camera_tolerance"`  // how far, as a share of the window, he may drift before it moves
 	FontFile         string  `toml:"font_file"`         // caption font; its directory is searched
 	FontFamily       string  `toml:"font_family"`       // the font's family name, as captions refer to it
 }
@@ -91,7 +92,7 @@ func Default() Config {
 		Audio:         Audio{VideoLUFS: -14, PodcastLUFS: -16, TruePeak: -1.5, PodcastBitrate: "192k"},
 		Video:         Video{Preset: "slow", CRF: 13},
 		Clips: Clips{
-			Count: 3, MinScore: 6, MinSeconds: 25, MaxSeconds: 90, CRF: 16, SmoothingSeconds: 0.3,
+			Count: 3, MinScore: 6, MinSeconds: 25, MaxSeconds: 90, CRF: 16, SmoothingSeconds: 1, CameraTolerance: 0.08,
 			FontFile: "/System/Library/Fonts/Supplemental/Arial Black.ttf", FontFamily: "Arial Black",
 		},
 		Thumbnails: Thumbnails{Count: 4, FontFile: "/System/Library/Fonts/Supplemental/Arial Black.ttf"},
@@ -130,6 +131,7 @@ func (c Config) Validate() error {
 	check(c.Clips.Count >= 0 && c.Clips.MinSeconds > 0 && c.Clips.MaxSeconds > c.Clips.MinSeconds,
 		"clips: count must be >= 0 and min_seconds < max_seconds")
 	check(c.Clips.SmoothingSeconds > 0, "clips.smoothing_seconds must be positive")
+	check(c.Clips.CameraTolerance > 0 && c.Clips.CameraTolerance < 0.3, "clips.camera_tolerance must be between 0 and 0.3")
 	check(c.Clips.FontFamily != "" && !strings.ContainsAny(c.Clips.FontFamily, ","),
 		"clips.font_family is required and cannot contain a comma")
 	// The caption font's directory goes inside an ffmpeg filter graph, where these characters

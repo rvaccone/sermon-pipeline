@@ -109,9 +109,9 @@ func (j *Job) Stages() []pipeline.Stage {
 			Run:     j.pickClips,
 		},
 		{
-			Name: "clips", Version: 2, Needs: []string{"probe", "sermon", "corrections", "clip-picks"},
+			Name: "clips", Version: 3, Needs: []string{"probe", "sermon", "corrections", "clip-picks"},
 			Inputs: func() any {
-				return []any{c.Clips.CRF, c.Clips.SmoothingSeconds, c.Clips.FontFamily, c.Clips.FontFile,
+				return []any{c.Clips.CRF, c.Clips.SmoothingSeconds, c.Clips.CameraTolerance, c.Clips.FontFamily, c.Clips.FontFile,
 					c.Video.Preset, c.Audio, j.uses(ffmpeg, visionTool)}
 			},
 			Outputs: j.clipFiles,

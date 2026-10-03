@@ -3,6 +3,7 @@ package clips
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -31,7 +32,7 @@ type RenderSpec struct {
 	Span       timeline.Span // on the source timeline
 	Audio      string        // mastered audio covering exactly Span
 	FrameH     int
-	Left       []float64 // window left edge per output frame; nil uses the uncropped layout
+	Left       []float64 // window left edge per output frame, in source pixels; nil uses the uncropped layout
 	Words      []transcript.Word
 	FontFamily string // caption font, by family name
 	FontDir    string // directory holding the caption font
@@ -52,12 +53,17 @@ func Render(ctx context.Context, s RenderSpec) error {
 		canvasW, canvasH, canvasW, canvasH)
 	foreground := fmt.Sprintf("[0:v]scale=%d:-2:flags=lanczos[fg]", canvasW)
 	if s.Left != nil {
-		if err := os.WriteFile(filepath.Join(s.WorkDir, cmdFile), []byte(cameraCommands(s.Left)), 0o644); err != nil {
+		// The frame is scaled up before it is cropped, so the window moves in steps of one output
+		// pixel. Cropping first would move it in whole (and, for 4:2:0 video, even) source pixels,
+		// which an upscale turns into visible hops during a slow pan.
+		zoom := canvasW / WindowWidth(s.FrameH)
+		height := int(math.Round(float64(s.FrameH) * zoom))
+		if err := os.WriteFile(filepath.Join(s.WorkDir, cmdFile), []byte(cameraCommands(s.Left, zoom)), 0o644); err != nil {
 			return err
 		}
 		// The crop is named so the camera commands reach it and not the background's crop.
-		foreground = fmt.Sprintf("[0:v]sendcmd=f=%s,crop@cam=w=%d:h=%d:x=%d:y=0,scale=%d:-2:flags=lanczos[fg]",
-			cmdFile, int(WindowWidth(s.FrameH)), s.FrameH, int(s.Left[0]), canvasW)
+		foreground = fmt.Sprintf("[0:v]scale=-2:%d:flags=lanczos,sendcmd=f=%s,crop@cam=w=%d:h=%d:x=%d:y=0:exact=1[fg]",
+			height, cmdFile, canvasW, height, int(math.Round(s.Left[0]*zoom)))
 	}
 	graph := fmt.Sprintf("%s;%s;[bg][fg]overlay=(W-w)/2:%d,ass=%s:fontsdir=%s[v]",
 		background, foreground, windowTop, assFile, s.FontDir)
@@ -70,14 +76,15 @@ func Render(ctx context.Context, s RenderSpec) error {
 		"-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-shortest", s.Dest)
 }
 
-// cameraCommands turns the path into ffmpeg sendcmd lines, one per change.
-func cameraCommands(left []float64) string {
+// cameraCommands turns the path, in source pixels, into ffmpeg sendcmd lines for the crop of the
+// frame scaled by zoom, one per change.
+func cameraCommands(left []float64, zoom float64) string {
 	var b strings.Builder
-	last := -1.0
+	last := -1
 	for i, x := range left {
-		if x != last {
-			fmt.Fprintf(&b, "%.4f crop@cam x %d;\n", float64(i)/fps, int(x))
-			last = x
+		if px := int(math.Round(x * zoom)); px != last {
+			fmt.Fprintf(&b, "%.4f crop@cam x %d;\n", float64(i)/fps, px)
+			last = px
 		}
 	}
 	return b.String()

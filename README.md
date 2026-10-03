@@ -106,7 +106,7 @@ probe → analysis audio ─┬─ transcribe ─┐
 | master audio | Rumble filter, gentle compression, gain to −14 LUFS (video) / −16 LUFS (podcast), 4× oversampled limiting; loudness and true peak are verified **after** encoding                        | ffmpeg                    |
 | video        | One x264 encode from the source (slow preset, CRF 13, keyframes every 2 s)                                                                                                               | ffmpeg                    |
 | clip picks | Claude proposes candidates; each is cut into pauses, then checked against the transcript, length and speaker turns; a second Claude pass reviews exactly what will be rendered | Claude |
-| clips | Neck tracking at 30 fps, a continuously centered 4:5 window, word-by-word captions, audio mastered per clip, x264 | Apple Vision, ffmpeg |
+| clips | Neck tracking at 30 fps; the camera path is planned for the whole clip at once, as the smoothest path that keeps the preacher within a small band around center, so it holds still while he sways and eases into and out of pans; the frame is scaled before cropping so the window moves in one-pixel steps; a 4:5 window, word-by-word captions, audio mastered per clip, x264 | Apple Vision, ffmpeg |
 | thumbnails   | Face-quality scoring with a penalty for on-screen text, then composition                                                                                                                 | Apple Vision, ImageMagick |
 
 The settings come from probing a real service: x264 beat Apple's hardware encoder on VMAF (worst-1%
@@ -116,7 +116,9 @@ regions are found separately; large-v3 fell into repetition loops (one sentence 
 minutes) where large-v3-turbo transcribed the same audio cleanly with the same punctuation, so turbo is
 the default; noise reduction made no audible difference on this church's gated microphone;
 a full-height 9:16 crop of 720p video kept the preacher's whole body in frame only 35–65% of the time, while the
-4:5 window keeps him whole 89–99% of the time.
+4:5 window keeps him whole 89–99% of the time. A camera that simply followed a smoothed position
+changed direction 23–30 times a minute as he swayed; the planned path changes direction 3–5 times a
+minute, only when he actually moves.
 
 On that service the pipeline placed the sermon's start 3.7 s after a hand-picked cut (it starts at the
 preacher's first sentence at the lectern rather than the "Amen" he says while walking up) and its end
