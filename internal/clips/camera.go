@@ -14,14 +14,15 @@ const fps = 30.0
 func FrameCount(d float64) int { return int(d*fps + 0.5) }
 
 // Camera describes the virtual camera: a window of WindowW pixels sliding across a frame of
-// FrameW pixels, following the preacher the way a camera operator would.
+// FrameW pixels, keeping the preacher centered.
 type Camera struct {
 	FrameW  float64
 	WindowW float64
-	// Tolerance is how far the preacher may drift from the window's center, as a share of its
-	// width, before the camera moves. It absorbs swaying and gesturing.
-	Tolerance float64
-	// Smoothing is roughly how many seconds the camera takes to ease into or out of a move.
+	// Steadiness is how large a sway the camera ignores, as a share of the window's width: it
+	// holds still through back-and-forth movement of about that size that reverses within a
+	// second, and follows anything that goes somewhere.
+	Steadiness float64
+	// Smoothing is the Gaussian sigma, in seconds, that rounds off the start and end of each move.
 	Smoothing float64
 }
 
@@ -33,10 +34,9 @@ const minCoverage = 0.7
 // clipStart, and whether tracking found the preacher often enough to use it.
 //
 // It follows the neck joint (steadier than a body box, which swings with gestures), falling back
-// to the face, then the body. The whole path is planned at once, since the clip is known in
-// advance: it is the smoothest path that keeps the preacher within Tolerance of center. So the
-// camera holds still while he stands and sways, eases into a pan when he walks, and eases out
-// again, never jumping.
+// to the face, then the body. The window stays centered on him as he moves, with no lag, since
+// the whole clip is known in advance. While he stands it holds still: his tracked position sways
+// a little even then, and following that sway made the camera hunt left and right.
 func (c Camera) Path(frames []vision.PoseFrame, clipStart float64, n int) ([]float64, bool) {
 	times, xs := anchor(frames, clipStart)
 	if len(xs) == 0 || float64(len(xs)) < minCoverage*float64(len(frames)) {
@@ -49,7 +49,9 @@ func (c Camera) Path(frames []vision.PoseFrame, clipStart float64, n int) ([]flo
 		x := interpolate(times, xs, float64(i)/fps) * c.FrameW
 		subject[i] = math.Max(half, math.Min(c.FrameW-half, x)) // the window can't leave the frame
 	}
-	centers := steady(subject, c.Tolerance*c.WindowW, c.Smoothing*fps, recenter*fps)
+	// A sway of amplitude a that reverses every p frames is flattened when lambda ≳ a·p/2.
+	lambda := c.Steadiness * c.WindowW * fps / 2
+	centers := gaussian(flatten(subject, lambda), c.Smoothing*fps)
 	left := make([]float64, n)
 	for i, center := range centers {
 		left[i] = math.Max(0, math.Min(c.FrameW-c.WindowW, center-half)) // sub-pixel; the render rounds
@@ -57,115 +59,88 @@ func (c Camera) Path(frames []vision.PoseFrame, clipStart float64, n int) ([]flo
 	return left, true
 }
 
-// Weights of the camera plan, relative to centering (weight 1): drifting past the tolerance
-// costs far more than any smoothness term, so it behaves almost like a hard limit.
-const outsideWeight = 1000
-
-// recenter is roughly how many seconds the camera takes to drift back to center while the
-// preacher stands within the tolerance: slow enough that nobody sees it move.
-const recenter = 6.0
-
-// steady plans the camera's center for each frame. It minimizes, over the whole clip:
+// flatten removes back-and-forth wobble from xs while keeping real moves: it is the path c
+// minimizing ½·Σ(c−x)² + lambda·Σ|Δc| (total-variation denoising). Because a move costs its
+// distance, not its speed, a small wobble is cheaper to ignore than to follow, so the path is
+// flat while he stands and sways, and follows him when he goes somewhere. A flat stretch of L
+// frames between moves sits within about 2·lambda/L pixels of where he actually stands.
 //
-//	Σ (c−s)²  +  outsideWeight·Σ max(0, |c−s|−tol)²  +  λ₁·Σ (Δc)²  +  λ₂·Σ (Δ²c)²
-//
-// where s is the subject's position: a weak pull toward the subject that recenters him slowly
-// while he stands, a strong one wherever he would drift past the tolerance, and penalties on the
-// camera's speed and acceleration that make it hold still and move in smooth, eased pans. Both
-// time scales are in frames: drift sets how slowly the weak pull recenters him (λ₁ = drift²),
-// and ease how gradually a pan starts and stops against the strong pull (λ₂ = outsideWeight·ease⁴).
-// The objective is convex; each round fixes which frames sit past the tolerance and solves the
-// resulting linear system, until that set stops changing.
-func steady(s []float64, tol, ease, drift float64) []float64 {
-	n := len(s)
-	if n < 3 {
-		return append([]float64(nil), s...)
+// It is solved by iteratively reweighted least squares: each round replaces |Δc| with a
+// quadratic that touches it at the current path, which leaves a tridiagonal system.
+func flatten(xs []float64, lambda float64) []float64 {
+	n := len(xs)
+	c := append([]float64(nil), xs...)
+	if n < 2 || lambda <= 0 {
+		return c
 	}
-	lambda1, lambda2 := drift*drift, outsideWeight*math.Pow(ease, 4)
-	c := append([]float64(nil), s...)
-	side := make([]int, n) // −1 or +1 where the camera sits past the tolerance, else 0
-	for round := 0; round < 50; round++ {
-		band := make([][3]float64, n) // band[i][k] = A(i, i−k)
-		b := make([]float64, n)
-		for i := range s {
-			band[i][0], b[i] = 1, s[i]
-			if side[i] != 0 {
-				edge := s[i] + float64(side[i])*tol
-				band[i][0] += outsideWeight
-				b[i] += outsideWeight * edge
-			}
+	const floor = 0.01 // pixels; keeps the weights finite where the path is already flat
+	diag, off := make([]float64, n), make([]float64, n-1)
+	for round := 0; round < 300; round++ {
+		for i := range diag {
+			diag[i] = 1
 		}
-		addDifferences(band, lambda1, []float64{-1, 1})
-		addDifferences(band, lambda2, []float64{1, -2, 1})
-		c = solveBand(band, b)
-
-		changed := false
-		for i := range s {
-			next := 0
-			switch {
-			case c[i] > s[i]+tol:
-				next = 1
-			case c[i] < s[i]-tol:
-				next = -1
-			}
-			if next != side[i] {
-				side[i], changed = next, true
-			}
+		for i := 0; i < n-1; i++ {
+			w := lambda / math.Max(floor, math.Abs(c[i+1]-c[i]))
+			diag[i] += w
+			diag[i+1] += w
+			off[i] = -w
 		}
-		if !changed {
+		next := solveTridiagonal(diag, off, xs)
+		change := 0.0
+		for i := range c {
+			change = math.Max(change, math.Abs(next[i]-c[i]))
+		}
+		c = next
+		if change < 0.01 {
 			break
 		}
 	}
 	return c
 }
 
-// addDifferences adds λ·DᵀD to the band matrix, where each row of D applies coefs to
-// consecutive frames (e.g. −1, 1 for speed).
-func addDifferences(band [][3]float64, lambda float64, coefs []float64) {
-	for start := 0; start+len(coefs) <= len(band); start++ {
-		for a := range coefs {
-			for b := 0; b <= a; b++ {
-				band[start+a][a-b] += lambda * coefs[a] * coefs[b]
-			}
-		}
-	}
-}
-
-// solveBand solves A·x = y for a symmetric positive-definite matrix with two diagonals on each
-// side of the main one, given as band[i][k] = A(i, i−k), by banded Cholesky factorization.
-func solveBand(band [][3]float64, y []float64) []float64 {
+// solveTridiagonal solves the symmetric system with the given main and off diagonals (Thomas
+// algorithm).
+func solveTridiagonal(diag, off, y []float64) []float64 {
 	n := len(y)
-	l := make([][3]float64, n) // l[i][k] = L(i, i−k)
-	for i := 0; i < n; i++ {
-		for k := min(2, i); k >= 0; k-- {
-			j := i - k
-			sum := band[i][k]
-			for m := max(0, i-2); m < j; m++ {
-				sum -= l[i][i-m] * l[j][j-m]
-			}
-			if k == 0 {
-				l[i][0] = math.Sqrt(sum)
-			} else {
-				l[i][k] = sum / l[j][0]
-			}
-		}
+	d := append([]float64(nil), diag...)
+	x := append([]float64(nil), y...)
+	for i := 1; i < n; i++ {
+		m := off[i-1] / d[i-1]
+		d[i] -= m * off[i-1]
+		x[i] -= m * x[i-1]
 	}
-	x := make([]float64, n)
-	for i := 0; i < n; i++ { // L·z = y
-		sum := y[i]
-		for m := max(0, i-2); m < i; m++ {
-			sum -= l[i][i-m] * x[m]
-		}
-		x[i] = sum / l[i][0]
-	}
-	for i := n - 1; i >= 0; i-- { // Lᵀ·x = z
-		sum := x[i]
-		for m := i + 1; m <= min(n-1, i+2); m++ {
-			sum -= l[m][m-i] * x[m]
-		}
-		x[i] = sum / l[i][0]
+	x[n-1] /= d[n-1]
+	for i := n - 2; i >= 0; i-- {
+		x[i] = (x[i] - off[i]*x[i+1]) / d[i]
 	}
 	return x
+}
+
+// gaussian smooths evenly spaced values with a Gaussian of sigma samples, looking both ways.
+func gaussian(xs []float64, sigma float64) []float64 {
+	reach := int(math.Ceil(3 * sigma))
+	weights := make([]float64, reach+1)
+	for k := range weights {
+		weights[k] = math.Exp(-0.5 * math.Pow(float64(k)/sigma, 2))
+	}
+	out := make([]float64, len(xs))
+	for i := range xs {
+		var sum, total float64
+		for j := max(0, i-reach); j <= min(len(xs)-1, i+reach); j++ {
+			w := weights[abs(i-j)]
+			sum += w * xs[j]
+			total += w
+		}
+		out[i] = sum / total
+	}
+	return out
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 // anchor picks, for each frame, the horizontal position of the person closest to where the

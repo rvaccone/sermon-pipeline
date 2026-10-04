@@ -70,7 +70,7 @@ func (j *Job) renderClips(ctx context.Context) error {
 	c := j.Config.Clips
 	cam := clips.Camera{
 		FrameW: float64(info.Width), WindowW: clips.WindowWidth(info.Height),
-		Tolerance: c.CameraTolerance, Smoothing: c.SmoothingSeconds,
+		Steadiness: c.CameraSteadiness, Smoothing: c.SmoothingSeconds,
 	}
 	renders := clipRenders{Uncropped: map[string]bool{}}
 	for _, clip := range sel.Clips {

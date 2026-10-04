@@ -14,7 +14,7 @@ import (
 	"github.com/rvaccone/sermon-pipeline/internal/vision"
 )
 
-var testCamera = Camera{FrameW: 1280, WindowW: 576, Tolerance: 0.08, Smoothing: 1}
+var testCamera = Camera{FrameW: 1280, WindowW: 576, Steadiness: 0.025, Smoothing: 0.2}
 
 // track builds pose frames at 30 fps from a neck position (share of frame width) over time.
 func track(seconds float64, neck func(t float64) float64) []vision.PoseFrame {
@@ -26,23 +26,23 @@ func track(seconds float64, neck func(t float64) float64) []vision.PoseFrame {
 	return frames
 }
 
-// motion reports how far the camera travels in total and how often it changes direction.
-func motion(left []float64) (travel float64, reversals int) {
-	dir := 0.0
-	for i := 1; i < len(left); i++ {
-		d := left[i] - left[i-1]
-		travel += math.Abs(d)
-		if math.Abs(d) > 0.05 {
+// reversals counts how often the rendered window changes direction, in output pixels.
+func reversals(left []float64) int {
+	count, dir := 0, 0.0
+	prev := math.Round(left[0] * 1.875)
+	for _, l := range left[1:] {
+		px := math.Round(l * 1.875)
+		if d := px - prev; d != 0 {
 			if dir != 0 && math.Signbit(d) != math.Signbit(dir) {
-				reversals++
+				count++
 			}
-			dir = d
+			dir, prev = d, px
 		}
 	}
-	return travel, reversals
+	return count
 }
 
-func TestCameraFollowsAWalk(t *testing.T) {
+func TestCameraKeepsHimCenteredAsHeWalks(t *testing.T) {
 	// He walks steadily from 30% to 70% of the frame over 10 seconds.
 	frames := track(10, func(t float64) float64 { return 0.3 + 0.04*t })
 	left, ok := testCamera.Path(frames, 100, 300)
@@ -51,42 +51,40 @@ func TestCameraFollowsAWalk(t *testing.T) {
 	}
 	for i := 30; i < 270; i += 30 {
 		neck := (0.3 + 0.04*float64(i)/30) * 1280
-		if off := math.Abs(neck - (left[i] + 288)); off > 0.08*576+3 {
-			t.Errorf("frame %d: %.1f px off-center, more than the tolerance", i, off)
+		if off := math.Abs(neck - (left[i] + 288)); off > 3 {
+			t.Errorf("frame %d: %.1f px off-center; he should stay centered, not trail", i, off)
 		}
 	}
 }
 
 func TestCameraHoldsStillWhileHeSways(t *testing.T) {
-	// He stands at 50% and sways ±30 px every two seconds for 30 seconds.
-	frames := track(30, func(t float64) float64 { return 0.5 + 30.0/1280*math.Sin(math.Pi*t) })
+	// He stands at 50% and sways ±8 px every second for 30 seconds.
+	frames := track(30, func(t float64) float64 { return 0.5 + 8.0/1280*math.Sin(2*math.Pi*t) })
 	left, _ := testCamera.Path(frames, 100, 900)
-	if travel, reversals := motion(left); travel > 5 || reversals > 0 {
-		t.Errorf("the camera moved %.1f px and changed direction %d times; it should hold still", travel, reversals)
+	lo, hi := left[0], left[0]
+	for _, l := range left {
+		lo, hi = math.Min(lo, l), math.Max(hi, l)
+	}
+	if hi-lo > 1 || reversals(left) > 0 { // under one output pixel in total
+		t.Errorf("the camera moved %.1f px and changed direction %d times; it should hold still", hi-lo, reversals(left))
 	}
 }
 
-func TestCameraEasesIntoAndOutOfAMove(t *testing.T) {
-	// He stands at 35%, takes two quick steps to 60% in one second, and stands again.
+func TestCameraSettlesWithoutOvershoot(t *testing.T) {
+	// He stands at 35%, steps to 60% in one second, and stands there swaying slightly.
 	frames := track(16, func(t float64) float64 {
 		f := math.Max(0, math.Min(1, t-8))
-		return 0.35 + 0.25*f
+		return 0.35 + 0.25*f + 6.0/1280*math.Sin(2*math.Pi*t)
 	})
 	left, _ := testCamera.Path(frames, 100, 480)
-	if _, reversals := motion(left); reversals > 0 {
-		t.Errorf("the camera changed direction %d times during one move; it should not overshoot", reversals)
+	if n := reversals(left); n > 0 {
+		t.Errorf("the camera changed direction %d times; after the step it should settle, not hunt", n)
 	}
-	var fastest, sharpest float64
-	for i := 2; i < len(left); i++ {
-		fastest = math.Max(fastest, math.Abs(left[i]-left[i-1]))
-		sharpest = math.Max(sharpest, math.Abs(left[i]-2*left[i-1]+left[i-2]))
+	if mid := 0.475*1280 - (left[255] + 288); math.Abs(mid) > 25 {
+		t.Errorf("mid-step he is %.0f px off-center; the camera should keep up", mid)
 	}
-	// He moves 320 px in 30 frames (10.7 px a frame, all at once); the camera spreads that out.
-	if fastest > 8 || sharpest > 0.6 {
-		t.Errorf("fastest %.1f px/frame, sharpest change %.2f px/frame²; the move should be eased", fastest, sharpest)
-	}
-	if end := 0.6*1280 - (left[len(left)-1] + 288); math.Abs(end) > 0.08*576+3 {
-		t.Errorf("he ends %.0f px off-center, outside the tolerance", end)
+	if end := 0.6*1280 - (left[len(left)-1] + 288); math.Abs(end) > 5 {
+		t.Errorf("he ends %.0f px off-center", end)
 	}
 }
 
@@ -102,7 +100,7 @@ func TestCameraClampsToFrameAndFallsBack(t *testing.T) {
 	cam := testCamera
 	edge := []vision.PoseFrame{{T: 0, Necks: []vision.Point{{0.99, 0.3}}}, {T: 1, Necks: []vision.Point{{0.99, 0.3}}}}
 	left, _ := cam.Path(edge, 0, 30)
-	if left[10] != 1280-576 {
+	if math.Abs(left[10]-(1280-576)) > 0.01 {
 		t.Errorf("left = %v; want clamped to %v", left[10], 1280-576)
 	}
 	empty := make([]vision.PoseFrame, 10)
